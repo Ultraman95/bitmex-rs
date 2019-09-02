@@ -25,17 +25,15 @@ use serde::de::Unexpected::Str;
 //需要指定变量类型,编译器不推导
 //无法通过mut使常量可变
 //内联方式
-const MAX_LINES : u32 = 100_000;
+const NON_MUT_CONST : u32 = 100_000;
+static mut MUTABLE_STATIC : u32= 100_000;
 
 fn main(){
     bitmex::print_version();
     utils::print_title("Hello Rust");
-    let x = String::from("");
 
-    fn is_hello<T: Into<Vec<u8>>>(s: T) {
-        let bytes = b"hello".to_vec();
-        assert_eq!(bytes, s.into());
-    }
+    let x = &var("aa").unwrap();
+    println!("{}",x);
 
     //test_base();
     //test_ref();
@@ -49,6 +47,8 @@ fn main(){
     //test_common();
     //test_panic();
     //test_trait();
+    test_closure();
+
 
     //test_libra();
 }
@@ -125,12 +125,13 @@ fn test_base(){
             //i = 32;   //Error,思考一下是什么原因呢？
         }
         fn test_mutable(mut i : i32){
-            i = 32;
+            i = 13;
         }
         let x = 32;
         test_mutable(x);
         let mut x = 32;
         test_mutable(x);    //如果从栈变量的值Copy来看，由于发生了Copy，原先变量x是否可变不重要了，拷贝后的变量i是否可变是关键
+
     }
 
     /*
@@ -145,6 +146,13 @@ fn test_base(){
         let x = true;
         let y = x;
         //y = false;    //Error,因为y是不可变的
+
+        {
+            //思考一下，Copy的相关细节
+            let x = 23;
+            let mut y = x;
+            let z = y;
+        }
 
         fn test_stack(i : bool) {
             //i = false;    //Error,思考一下为什么哦
@@ -218,6 +226,8 @@ fn test_tuple(){
         x.0 = 34;
         x.2.push_str(" push");
         x = (45, true, String::from("rust"));
+        fn test_mut(mut tup :(i32,bool,String)){}
+        fn test_ref_mut(tup : &mut(i32,bool,String)){}
     }
 }
 
@@ -239,6 +249,16 @@ fn test_ref(){
     }
 
     {
+        let mut x = 32;
+        let y = &mut x;
+        let mut y = &mut x;    //以上有什么样的区别呢
+
+        fn mut_fn(mut i:i32){}
+        fn ref_mut_fn(i : &mut i32){}
+        fn mut_ref_mut_fn(mut i : &mut i32){}
+    }
+
+    {
         //基本栈类型也是同样的
         let mut x= String::from("ref");
         let x1 = &x;
@@ -248,7 +268,6 @@ fn test_ref(){
             //所以，此范围可以对x进行操作，出了此范围x只能被引用
         }
         let y= &mut x;
-        //let mut y = &mut x;   //没有必要这么写
         //let z= &mut x;  //同时定义两个可变引用不会有错，但是用的时候就会编译不通过(因为可能会同时改变同一块内存)，所以不要同时声明两个同样的可变引用
         test_mutable_ref(y);
 
@@ -309,7 +328,7 @@ fn test_str(){
     s_r = &s;   //&String可以被强制转换成&str，反则不可以
     let tt : &str;
 
-
+    fn normal(s : &str){}   //参数多数喜欢使用&str而不是&String
 
 
 
@@ -505,6 +524,25 @@ fn test_trait(){
     }
     let x = String::from("pp");
     &x as &Foo;
+
+}
+
+fn test_closure(){
+    let mut x = 4;
+    let mut change = |mut v| {
+        x = 1;  //对于此处x而言，相当于是&mut x，由于要修改x，所以change是FnMut需要加mut。
+        v = x;  //对于此处x而言，是Copy，由于v是可变的，所以是mut v
+        v
+    };
+
+    let y = 10;
+    let v = change(y);  //此处y是Copy
+
+    let cc  = |v : &mut i32 | {
+        *v = 10;
+        *v
+    };
+
 
 
 }
