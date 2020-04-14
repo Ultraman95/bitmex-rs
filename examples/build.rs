@@ -7,6 +7,7 @@ use std::cmp::Ordering;
 use std::fs::File;
 use std::io::ErrorKind;
 use std::env::var;
+use std::num::FpCategory;
 
 use bitmex::core::utils;
 use bitmex::{BitMEX, Result};
@@ -30,8 +31,11 @@ const NON_MUT_CONST: u32 = 100_000;
 static mut MUTABLE_STATIC: u32 = 100_000;
 
 fn main() {
+
+
     bitmex::print_version();
     utils::print_title("Hello Rust");
+
 
     //let x = &var("aa").unwrap();
 
@@ -49,7 +53,7 @@ fn main() {
     //test_trait();
     //test_closure();
 
-
+    test_float();
     //test_libra();
 }
 
@@ -70,7 +74,8 @@ fn test_base() {
         let n: usize = 5000;
         n + 1;
 
-        let f = 2.3;
+        let f: f32 = 2.0;
+        let f = 2.;
         let b = false;
         let c = 'a';    //unicode字符，4个字节
         let u: u8 = b'c';   //此处如果指定类型必须这么写，ASCII字符可以用这个，减少空间
@@ -246,10 +251,10 @@ fn test_tuple() {
 fn test_ref() {
     {
         //基础类型（在栈上赋值很快，一般不用引用）
-        let x = 32;
-        let y = x;
-        println!("{:p},{:p}", &x, &y);
-        println!("{},{}", x, y);
+        let mut x = 5;
+        let y = &mut x;
+        *y = 7;
+        println!("{}", x);
 
         let x = 32;
         let y = &x;
@@ -274,14 +279,18 @@ fn test_ref() {
         {
             //由于有下面可变引用y的存在
             //所以，只有此范围可以对x1进行只读操作
+
             //x1.push_str("tt");    //Error
             x.push_str("Str");
+            //println!("{}", x1); //Error，x1已经失效了无法被用
         }
 
-        let y = &mut x;     //此处开始，前面涉及x的相关引用也将无法再被使用
+        let y = &mut x;     //此处开始，则前面涉及x的相关引用（包括x）也将无法再被使用，直到y不被使用了
+        //x.push_str("");   //Error
         //y = &mut z;   //Error
         y.push_str("aa");
         println!("{}", x);
+        //println!("{}", y);    //Error，可变引用的使用在不可变引用的使用之后，这是不行的
         let mut y = &mut x;
         y.push_str("bb");
         //以下一旦使用了x，y只能被重新赋值后才能操作
@@ -302,7 +311,7 @@ fn test_ref() {
         println!("{}", z);  //y的使用范围到此处截止，y只能被重新赋值后才能操作，否则无法使用了
         //y.push_str("dd"); //Error
 
-        //println!("{}", x1); //Error，x1已经失效了无法被用
+
 
         t.push_str("tt");
 
@@ -463,6 +472,13 @@ fn test_match() {
         println!("something else");
     }
 
+    let r = rand::thread_rng().gen_range(1,100);
+    let n = if r > 50 {
+        r - 50
+    } else {
+        r + 50
+    };
+
     match File::open("xx.txt") {
         Ok(_) => println!("open success"),
         Err(err) => match err.kind() {
@@ -509,6 +525,29 @@ fn test_enum() {
 
 //结构体
 fn test_struct() {
+    struct Point{
+        x: i32,
+        y: i32
+    }   //不支持字段可变性
+    let p = Point{x :0, y:0};
+    let x = 1;
+    let y = 2;
+    let mut p = Point{x, y}; //同名可以省略key，否则形式上必须是key:value
+    p.x = 1;
+
+    struct  PointRef<'a>{
+        x: &'a mut i32,
+        y: &'a mut i32,
+    }
+    let mut a = 1;
+    let mut b = 2;
+    let p1 = PointRef{ x: &mut a, y: &mut b};
+    *p1.x = 3;
+    *p1.y = 4;
+    println!("{} , {}",a,b);
+
+
+
     #[derive(Debug)]
     struct User {
         name: String,
@@ -555,8 +594,6 @@ fn test_struct() {
     println!("{:#?}", user1);
 }
 
-
-
 fn test_common() {
     //statement(语句)和expression(表达式)的关系，statement执行一些动作但不会得到一个可返回的值，expression会得到一个可返回的结果值
     //statement是以分号结束的，但expression没有结尾的分号
@@ -578,9 +615,8 @@ fn test_common() {
             1
         }
     }
+
 }
-
-
 
 fn test_panic() {
     panic!("crash and exit");
@@ -593,6 +629,7 @@ fn test_macro() {
     }
 }
 
+//特性
 fn test_trait() {
     trait Foo {
         fn method(&self) -> String;
@@ -608,6 +645,7 @@ fn test_trait() {
     &x as &Foo;
 }
 
+//闭包
 fn test_closure() {
     let mut x = 4;
     let mut change = |mut v| {
@@ -623,6 +661,50 @@ fn test_closure() {
         *v = 10;
         *v
     };
+}
+
+fn test_control(){
+    let a = [1,2,3,4,5];
+    for e in a.iter(){
+        println!("the value is: {}", e);
+    }
+}
+
+fn test_float() {
+    // 浮点数一共有5个种类，在std::num::FpCategory下面定义了
+    // 由于FpCategory::Nan的存在，浮点数是偏序关系，不是全序关系，无法在集合内比较大小
+    let int_vec = [1_i32, 2, 3];
+    let biggest_int = int_vec.iter().max();
+    let float_vec = [1.0_f32, 2.0, 3.0];
+    //let biggest_float = float_vec.iter().max();   //Error
+
+    //让大家感受一下浮点数有哪5个种类
+    let x = 1.0f32 / 0.0;
+    let y = 0.0f32 / 0.0;
+    println! ( "{} , {}", x, y);
+    assert_eq!(x.classify(), FpCategory::Infinite);
+    assert_eq!(y.classify(), FpCategory::Nan);
+
+    let mut small= std::f32::EPSILON;
+    while small > 0.0 {
+        small = small / 2.0;
+        if small.classify() == FpCategory::Normal {
+            print!("Normal-");
+        } else if small.classify() == FpCategory::Subnormal {
+            print!("SubNormal-");
+        } else if small.classify() == FpCategory::Zero {
+            print!("Zero-");
+        }
+        println!("{} ", small);
+    }
+}
+
+fn test_vc(){
+    let v = vec![2,3,4];
+    let mut v = Vec::new();
+    v.push(23);
+    v.push(45);
+    v.push(67);
 }
 
 
