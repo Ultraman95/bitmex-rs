@@ -8,6 +8,7 @@ use std::fs::File;
 use std::io::ErrorKind;
 use std::env::var;
 use std::num::FpCategory;
+use std::ops::Add;
 
 use bitmex::core::utils;
 use bitmex::{BitMEX, Result};
@@ -23,19 +24,19 @@ use serde::de::Unexpected::Str;
 
 
 
-//常量，全局变量的名称需要大写，不然就会有警告提示。且需要指定变量类型,编译器不推导，声明是必须初始化
+//常量，全局变量的名称需要大写，不然就会有警告提示。且需要指定变量类型,编译器不推导，声明时必须初始化
 //常量一般使用内联方式，在不同地方对同一常量的引用并不能保证引用到相同的内存地址
 //全局变量则是同一内存空间
 //无法通过mut使常量可变，全局变量则可以使用mut(必须在unsafe中)
 const NON_MUT_CONST: u32 = 100_000;
-static mut MUTABLE_STATIC: u32 = 100_000;
+static mut MUT_STATIC: u32 = 100_000;
 
 fn main() {
-
 
     bitmex::print_version();
     utils::print_title("Hello Rust");
 
+    unsafe { MUT_STATIC = 12 ;};
 
     //let x = &var("aa").unwrap();
 
@@ -48,14 +49,16 @@ fn main() {
     //test_match();
     //test_enum();
     //test_struct();
+    test_trait();
     //test_common();
     //test_panic();
     //test_trait();
     //test_closure();
 
-    test_float();
+    //test_float();
     //test_libra();
 }
+
 
 //基础
 fn test_base() {
@@ -78,10 +81,11 @@ fn test_base() {
         let f = 2.;
         let b = false;
         let c = 'a';    //unicode字符，4个字节
-        let u: u8 = b'c';   //此处如果指定类型必须这么写，ASCII字符可以用这个，减少空间
+        let u: u8 = b'c';     //此处如果指定类型必须是u8，ASCII字符可以用这个，减少空间
 
         //整数字面常量，_作为分隔符便于阅读
         let z  = 23_22; //10进制
+        let z = 12_01_i32;
         let z = 0x_ff_i64;   //16进制，这种写法最合理清楚
         let z= 0o11;    //8进制
         let z = 0b11_00;//2进制
@@ -503,15 +507,18 @@ fn test_enum() {
         Julia { version: i32, name: String }, //匿名元组结构体
     }
 
-
-    fn findLanguage(language: MyLanguage) {
-        match language {
-            MyLanguage::Rust(version) => println!("{}", version),
-            MyLanguage::C(_, _) => (),
-            other_language_version => println!("{:?}", other_language_version),
+    impl MyLanguage{
+        fn findLanguage(&self){
+            match self {
+                MyLanguage::Rust(version) => println!("{}", version),
+                MyLanguage::C(_, _) => (),
+                other_language_version => println!("{:?}", other_language_version),
+            }
         }
     }
-    findLanguage(MyLanguage::Java(7));
+
+    MyLanguage::Java(7).findLanguage();
+    MyLanguage::findLanguage(&MyLanguage::Java(7));
 
 
     //if let替代match的表现形式
@@ -527,14 +534,20 @@ fn test_enum() {
 fn test_struct() {
     struct Point{
         x: i32,
-        y: i32
+        y: i32,
+        z: f32
     }   //不支持字段可变性
-    let p = Point{x :0, y:0};
+
+    let p = Point{x :0, z :0.32, y :23};
+    let p = Point{z :0.46, ..p};
+
     let x = 1;
     let y = 2;
-    let mut p = Point{x, y}; //同名可以省略key，否则形式上必须是key:value
-    p.x = 1;
+    let z = 2.3;
+    let mut p = Point{x, y, z};     //同名可以省略key，否则形式上必须是key:value
+    p.x = 1;    //此处只能.key,不可以.0
 
+    //生命周期结构体
     struct  PointRef<'a>{
         x: &'a mut i32,
         y: &'a mut i32,
@@ -546,6 +559,18 @@ fn test_struct() {
     *p1.y = 4;
     println!("{} , {}",a,b);
 
+    struct Car {
+        name: &'static str,
+        age: i32,
+    }
+
+
+    //匿名成员结构体,又叫“元组结构体”
+    struct Point2(i32, i32);
+    let p = Point2(23, 45);
+    let x = p.0;
+    let y = p.1;
+    let Point2(_, z) = p;
 
 
     #[derive(Debug)]
@@ -554,44 +579,165 @@ fn test_struct() {
         age: i32,
     }
 
-    struct Car {
-        name: &'static str,
-        age: i32,
-    }
+    struct Empty{}
+    struct Empty1;
 
-
-    // 匿名成员结构体,又叫“元组结构体”
-    struct Point2(i32, i32);
-    let p = Point2(23, 45);
-    let p = Point2::new(12, 67);
-    println!("{},{}", p.0, p.1);
-
+    //方法调用--self表示调用方法的对象，Self表示调用者的类型
+    //参数self 等价于 self : Self
+    //参数&self 等价于 self : &Self
+    //参数&mut self 等价于 self : &mut Self
     impl User {
-        //Self指的是类
+        //Self指的是调用者的类型
         pub fn new(name: String, age: i32) -> Self {
-            User { name, age }   //同名可以省略key，否则形式上必须是key:value
+            User { name, age }   //此处不能有分号，同名可以省略key，否则形式上必须是key:value
+        }
+        pub fn new1(name: String, age: i32) -> User {
+            User { name, age }
         }
 
         //&self指的是类对象
         fn change_user_name(&mut self, new_name: String) {
             self.name = new_name;
         }
+
+        fn isLarger(&self , other : &Self) -> bool{
+            self.age > other.age    //此处不能有分号，有分号就不是返回语句了
+        }
+
+        fn xx(){}
+
+        //总结：参数里面没有self的就是静态方法(关联函数)，需要类型调用
     }
 
-    impl Point2 {
-        pub fn new(x: i32, y: i32) -> Self {
-            Point2(x, y)    //此处不能有分号
+
+    let mut user = User { name: String::from("shilf"), age: 41 };
+    let mut user = User::new(String::from("shilf"), 32);
+    let user1 = User { name: String::from("shily"), ..user };      //此处只是做了一次复制，没有任何关联关系
+    user.change_user_name(String::from("shilp"));
+    user.name.push_str("--yx");
+    User::change_user_name(&mut user,String::from("shijh"));
+    User::xx();
+    user.isLarger(&user1);
+    println!("{:#?}", user);
+    println!("{:#?}", user1);
+}
+
+fn test_vc(){
+    let mut v : Vec<i32> = Vec::new();
+    v.push(12);
+
+    let mut v = Vec::new(); //推导类型
+    v.push(23);
+
+    let mut v = vec![2,3,4];    //宏+推导类型
+    v.push(34);
+
+    let mut v = Vec::<i32>::new();  //turbofish语法
+    v.push(45);
+}
+
+//泛型
+fn test_generic() {
+    //枚举中的泛型
+    let x : Option<i32> = Some(5);
+    let x : Option<f64> = Some(2.3);
+    let x : Option<bool> = Some(true);
+
+    //普通的函数泛型
+    fn add<T: Add<T, Output=T>>(a:T, b:T) -> T {
+        a + b
+    }
+
+    //结构体泛型
+    struct Point<T>{
+        x : T,
+        y : T,
+        z : T
+    }
+
+    //方法定义中的泛型
+    impl<T> Point<T> {
+        fn swap(&mut self) {
+            std::mem::swap(&mut self.x, &mut self.y);
         }
     }
 
-    let mut user = User::new(String::from("shilf"), 32);
-    let mut user = User { name: String::from("shilf"), age: 41 };
-    let user1 = User { name: String::from("shily"), ..user };      //此处只是做了一次复制，没有任何关联关系
-    println!("{:#?}", user1);
-    user.change_user_name(String::from("shilp"));
-    user.name.push_str(" &");
-    println!("{:#?}", user);
-    println!("{:#?}", user1);
+}
+
+//特性
+fn test_trait() {
+    //类似其他语言的接口，要想实现特性，必须实现特性中的所有方法（以实现的方法除外，列如xx）
+    trait FT {
+        fn format(&self) -> String;
+
+        fn xx(){}
+    }
+
+
+    impl FT for u8 {
+        fn format(&self) -> String { format!("{}:u8", *self) }
+    }
+
+    impl FT for f64 {
+        fn format(&self) -> String { format!("{}:u8", *self) }
+    }
+
+    impl FT for String {
+        fn format(&self) -> String { format!("{}:String", *self) }
+    }
+
+    let x = b'a';
+    FT::format(&x);     //关联函数用法，和下面等价
+    println!("{}",x.format());
+
+    //泛型的特性范围
+    fn printX<T : FT>(tmp : T) {
+        println!("{}", tmp.format());
+    }
+
+    struct Point<T : FT>{
+        x : T,
+        y : T,
+        z : T
+    }
+
+    impl<T:FT> FT for Point<T> {
+        fn format(&self) -> String {
+            format!("Point: x={} , y={} , z={}", self.x.format(), self.y.format(), self.z.format())
+        }
+    }
+
+    let p = Point{x:b'a', y:b'c', z:b'g'};
+    printX(p);
+
+
+    //多限定，特性继承，泛型特性
+    trait Large<T> : FT{
+        fn isLarger(&self , other: T) -> bool;
+    }
+
+    impl Large<u8> for u8{
+        fn isLarger(&self, other: u8) -> bool{
+            *self > other
+        }
+    }
+    impl Large<f64> for f64{
+        fn isLarger(&self, other: f64) -> bool{
+            *self > other
+        }
+    }
+    impl Large<u8> for f64{
+        fn isLarger(&self, other: u8) -> bool{
+            *self > other as f64
+        }
+    }
+
+    b'a'.isLarger(b'c');
+
+    trait Small<T,E> {
+        fn isSmaller(x: T , y: E) -> bool;
+    }
+
 }
 
 fn test_common() {
@@ -627,22 +773,6 @@ fn test_macro() {
     macro_rules! ttg {
         () => {};
     }
-}
-
-//特性
-fn test_trait() {
-    trait Foo {
-        fn method(&self) -> String;
-    }
-
-    impl Foo for u8 {
-        fn method(&self) -> String { format!("u8: {}", *self) }
-    }
-    impl Foo for String {
-        fn method(&self) -> String { format!("string: {}", *self) }
-    }
-    let x = String::from("pp");
-    &x as &Foo;
 }
 
 //闭包
@@ -699,13 +829,7 @@ fn test_float() {
     }
 }
 
-fn test_vc(){
-    let v = vec![2,3,4];
-    let mut v = Vec::new();
-    v.push(23);
-    v.push(45);
-    v.push(67);
-}
+
 
 
 //---------------------------------Libra----------------------------
