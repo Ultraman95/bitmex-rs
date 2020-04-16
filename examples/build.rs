@@ -57,6 +57,8 @@ fn main() {
 
     //test_float();
     //test_libra();
+
+    test_drop();
 }
 
 
@@ -655,6 +657,13 @@ fn test_generic() {
         z : T
     }
 
+    struct Point1<T = i32>{
+        x : T,
+        y : T,
+        z : T
+    }
+    let p = Point1{x: 2, y: 3, z: 4};
+
     //方法定义中的泛型
     impl<T> Point<T> {
         fn swap(&mut self) {
@@ -670,8 +679,25 @@ fn test_trait() {
     trait FT {
         fn format(&self) -> String;
 
-        fn xx(){}
+        //fn xx(){}  //如果加这种第一参数不是self相关的方法，就没有办法动态分发，原因是trait不是对象安全的
     }
+
+    struct CC;
+    impl CC{
+        fn format(&self) -> String {
+            return String::from("CC");
+        }
+    }
+
+    impl FT for CC {
+        fn format(&self) -> String {
+            return String::from("FT::CC");
+        }
+    }
+    let c = CC{};
+    println!("{}", c.format());
+    println!("{}", <CC as FT>::format(&c));
+    println!("{}", FT::format(&c)); //缩写模式
 
 
     impl FT for u8 {
@@ -691,9 +717,23 @@ fn test_trait() {
     println!("{}",x.format());
 
     //泛型的特性范围
-    fn printX<T : FT>(tmp : T) {
+    //静态分发--缺点是代码会膨胀，但运行时没有开销
+    fn printX<T : FT>(tmp : &T) {
         println!("{}", tmp.format());
     }
+    //动态分发--缺点是调用虚函数，但运行时有开销（虚函数表）
+    fn printY(tmp: &FT) {
+        println!("{}", tmp.format());
+    }
+
+    fn printZ(tmp: Box<FT>) {
+        println!("{}", tmp.format());
+    }
+
+    /*
+    fn printZ(tmp: FT) {
+        println!("{}", tmp.format());
+    }*/     //Error,FT的编译器Size不确定，所以要使用指针
 
     struct Point<T : FT>{
         x : T,
@@ -708,13 +748,16 @@ fn test_trait() {
     }
 
     let p = Point{x:b'a', y:b'c', z:b'g'};
-    printX(p);
-
+    printX(&p);
+    printY(&p);
 
     //多限定，特性继承，泛型特性
     trait Large<T> : FT{
         fn isLarger(&self , other: T) -> bool;
     }
+    //fn tt<T:Large>(x: T){}    //Error:文法错误
+    fn tt<T:Large<u8>>(x: T){}
+    fn tt1<T:Large<T>>(x: T){}
 
     impl Large<u8> for u8{
         fn isLarger(&self, other: u8) -> bool{
@@ -738,6 +781,31 @@ fn test_trait() {
         fn isSmaller(x: T , y: E) -> bool;
     }
 
+    fn zz<T : Large<T>,K : Large<T> + Small<T, K>>(x: T, y: K){
+        println!("zz");
+    }
+
+    fn zz1<T,K>(x: T, y: K)
+        where T: Large<T>,
+              K: Large<T> + Small<T, K>{
+        println!("zz1");
+    }
+}
+
+fn test_drop() {
+    struct Firework {
+        strength: i32,
+    }
+
+    impl Drop for Firework {
+        fn drop(&mut self) {
+            println!("Drop {}!!!", self.strength);
+        }
+    }
+
+    let a = Firework { strength: 1 };
+    let b = Firework { strength: 100 };
+    //后进先出原则
 }
 
 fn test_common() {
